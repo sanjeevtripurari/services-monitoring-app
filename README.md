@@ -1,10 +1,10 @@
-# Service Monitor
+# Services-Monitoring-App
 
 A web-based application for monitoring services and managing health checks with a modern, responsive interface.
 
 ## Features
 
-- **Monitor Management**
+- **Alerts Management**
   - Create, read, update, and delete service monitors
   - Configure health checks with custom schedules
   - Support for HTTP, HTTPS, TCP, and UDP services
