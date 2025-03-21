@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Services Update{% endblock %}
+
+{% block header %}Services Update{% endblock %}
+
+{% block content %}
+<div class="button-group">
+    <button class="btn btn-primary" onclick="window.location.reload()">Refresh</button>
+    <button class="btn btn-success" onclick="exportSelected()">Export Selected</button>
+    <button class="btn btn-info" onclick="exportAllCSV()">Export All CSV</button>
+    <button class="btn btn-warning" onclick="document.getElementById('uploadModal').style.display='block'">Import CSV</button>
+</div>
+
+<!-- File Upload Modal -->
+<div id="uploadModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close" onclick="document.getElementById('uploadModal').style.display='none'">&times;</span>
+        <h2>Upload CSV File</h2>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="csvFile">Select CSV File:</label>
+                <input type="file" id="csvFile" name="file" accept=".csv" required>
+            </div>
+            <div class="button-group">
+                <button type="button" class="btn btn-primary" onclick="uploadCSV()">Upload</button>
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('uploadModal').style.display='none'">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<form id="serviceForm" action="/service" method="post" class="form-container">
+    <input type="hidden" id="isEdit" name="isEdit" value="false">
+    <input type="hidden" id="editAlertName" name="editAlertName">
+    <div class="form-group">
+        <label for="AlertName">Alert Name:</label>
+        <input type="text" id="AlertName" name="AlertName" required>
+    </div>
+    <div class="form-group">
+        <label for="ServiceType">Service Type:</label>
+        <input type="text" id="ServiceType" name="ServiceType" required>
+    </div>
+    <div class="form-group">
+        <label for="HostName">Host Name:</label>
+        <input type="text" id="HostName" name="HostName" required>
+    </div>
+    <div class="form-group">
+        <label for="CheckStatus">Check Status:</label>
+        <select id="CheckStatus" name="CheckStatus" required>
+            <option value="UP">UP</option>
+            <option value="DOWN">DOWN</option>
+        </select>
+    </div>
+    <div class="button-group">
+        <button type="submit" class="btn btn-primary" id="submitBtn">Add Service</button>
+        <button type="button" class="btn btn-danger" onclick="resetForm()">Reset Form</button>
+        <button type="button" class="btn btn-secondary" onclick="cancelEdit()" id="cancelBtn" style="display: none;">Cancel Edit</button>
+    </div>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th><input type="checkbox" id="selectAll" onclick="toggleAll(this)"></th>
+            <th>Alert Name</th>
+            <th>Service Type</th>
+            <th>Host Name</th>
+            <th>Check Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if services %}
+            {% for service in services %}
+            <tr data-alert-name="{{ service.AlertName }}">
+                <td><input type="checkbox" class="service-checkbox" value="{{ service.AlertName }}"></td>
+                <td>{{ service.AlertName }}</td>
+                <td>{{ service.ServiceType }}</td>
+                <td>{{ service.HostName }}</td>
+                <td class="status-{{ service.CheckStatus.lower() }}">{{ service.CheckStatus }}</td>
+                <td class="actions">
+                    <button class="btn btn-primary" onclick="editService('{{ service.AlertName }}')">Edit</button>
+                    <button class="btn btn-danger" onclick="deleteService('{{ service.AlertName }}')">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="6" class="empty-state">
+                    <p>No services found</p>
+                </td>
+            </tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleAll(source) {
+        const checkboxes = document.getElementsByClassName('service-checkbox');
+        for (let checkbox of checkboxes) {
+            checkbox.checked = source.checked;
+        }
+    }
+
+    function exportSelected() {
+        const checkboxes = document.getElementsByClassName('service-checkbox');
+        const selected = [];
+        for (let checkbox of checkboxes) {
+            if (checkbox.checked) {
+                selected.push(checkbox.value);
+            }
+        }
+        if (selected.length === 0) {
+            alert('Please select at least one service to export');
+            return;
+        }
+        window.location.href = `/service/export?services=${selected.join(',')}`;
+    }
+
+    function exportAllCSV() {
+        window.location.href = '/service/export';
+    }
+
+    function uploadCSV() {
+        const fileInput = document.getElementById('csvFile');
+        if (!fileInput.files || fileInput.files.length === 0) {
+            alert('Please select a file to upload');
+            return;
+        }
+
+        const file = fileInput.files[0];
+        if (!file.name.endsWith('.csv')) {
+            alert('Please select a CSV file');
+            return;
+        }
+
+        // Create FormData object
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Send request to server
+        fetch('/service/import', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            alert(`Successfully imported ${data.imported} services`);
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while importing services');
+        })
+        .finally(() => {
+            document.getElementById('uploadModal').style.display = 'none';
+            document.getElementById('uploadForm').reset();
+        });
+    }
+
+    function editService(alertName) {
+        const row = document.querySelector(`tr[data-alert-name="${alertName}"]`);
+        if (!row) return;
+        
+        const cells = row.cells;
+        
+        // Set form values
+        document.getElementById('isEdit').value = 'true';
+        document.getElementById('editAlertName').value = alertName;
+        document.getElementById('AlertName').value = cells[1].textContent;
+        document.getElementById('ServiceType').value = cells[2].textContent;
+        document.getElementById('HostName').value = cells[3].textContent;
+        document.getElementById('CheckStatus').value = cells[4].textContent;
+        
+        // Update form action and button text
+        document.getElementById('serviceForm').action = `/service/${alertName}`;
+        document.getElementById('submitBtn').textContent = 'Update Service';
+        document.getElementById('cancelBtn').style.display = 'inline-block';
+        
+        // Scroll to form
+        document.getElementById('serviceForm').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+        resetForm();
+        document.getElementById('isEdit').value = 'false';
+        document.getElementById('editAlertName').value = '';
+        document.getElementById('serviceForm').action = '/service';
+        document.getElementById('submitBtn').textContent = 'Add Service';
+        document.getElementById('cancelBtn').style.display = 'none';
+    }
+
+    function deleteService(alertName) {
+        if (confirm(`Are you sure you want to delete service "${alertName}"?`)) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/service/${alertName}/delete`;
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    function resetForm() {
+        document.getElementById('serviceForm').reset();
+        document.getElementById('isEdit').value = 'false';
+        document.getElementById('editAlertName').value = '';
+        document.getElementById('serviceForm').action = '/service';
+        document.getElementById('submitBtn').textContent = 'Add Service';
+        document.getElementById('cancelBtn').style.display = 'none';
+    }
+</script>
+
+<style>
+    /* Modal styles */
+    .modal {
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.4);
+    }
+
+    .modal-content {
+        background-color: #fefefe;
+        margin: 10% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        max-width: 500px;
+    }
+
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close:hover {
+        color: black;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+    }
+
+    .form-group input[type="file"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+</style>
+
+{% endblock %} 

@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts Update{% endblock %}
+
+{% block header %}Alerts Update{% endblock %}
+
+{% block content %}
+<div class="button-group">
+    <button class="btn btn-primary" onclick="window.location.reload()">Refresh</button>
+    <button class="btn btn-success" onclick="exportSelected()">Export Selected</button>
+    <button class="btn btn-info" onclick="exportAllCSV()">Export All CSV</button>
+    <button class="btn btn-warning" onclick="document.getElementById('uploadModal').style.display='block'">Import CSV</button>
+</div>
+
+
+<!-- File Upload Modal -->
+<div id="uploadModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close" onclick="document.getElementById('uploadModal').style.display='none'">&times;</span>
+        <h2>Upload CSV File</h2>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="csvFile">Select CSV File:</label>
+                <input type="file" id="csvFile" name="file" accept=".csv" required>
+            </div>
+            <div class="button-group">
+                <button type="button" class="btn btn-primary" onclick="uploadCSV()">Upload</button>
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('uploadModal').style.display='none'">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<form id="monitorForm" action="/monitor" method="post" class="form-container">
+    <input type="hidden" id="isEdit" name="isEdit" value="false">
+    <input type="hidden" id="editAlertName" name="editAlertName">
+    <div class="form-group">
+        <label for="AlertName">Alert Name:</label>
+        <input type="text" id="AlertName" name="AlertName" required>
+    </div>
+    <div class="form-group">
+        <label for="Connection">Connection:</label>
+        <input type="text" id="Connection" name="Connection" required>
+    </div>
+    <div class="form-group">
+        <label for="ServiceType">Service Type:</label>
+        <input type="text" id="ServiceType" name="ServiceType" required>
+    </div>
+    <div class="form-group">
+        <label for="HealthCheck">Health Check:</label>
+        <input type="text" id="HealthCheck" name="HealthCheck" required>
+    </div>
+    <div class="form-group">
+        <label for="Response">Expected Response:</label>
+        <input type="text" id="Response" name="Response" required>
+    </div>
+    <div class="form-group">
+        <label for="Description">Description:</label>
+        <textarea id="Description" name="Description" required></textarea>
+    </div>
+    <div class="form-group">
+        <label for="Status">Status:</label>
+        <select id="Status" name="Status" required>
+            <option value="UP">UP</option>
+            <option value="DOWN">DOWN</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="ScheduleTime">Schedule Time:</label>
+        <input type="datetime-local" id="ScheduleTime" name="ScheduleTime" required>
+    </div>
+    <div class="form-group">
+        <label for="Frequency">Frequency (minutes):</label>
+        <input type="number" id="Frequency" name="Frequency" min="1" value="1" required>
+    </div>
+    <div class="button-group">
+        <button type="submit" class="btn btn-primary" id="submitBtn">Add Alert</button>
+        <button type="button" class="btn btn-danger" onclick="resetForm()">Reset Form</button>
+        <button type="button" class="btn btn-secondary" onclick="cancelEdit()" id="cancelBtn" style="display: none;">Cancel Edit</button>
+    </div>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th><input type="checkbox" id="selectAll" onclick="toggleAll(this)"></th>
+            <th>Alert Name</th>
+            <th>Connection</th>
+            <th>Service Type</th>
+            <th>Health Check</th>
+            <th>Response</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th>Schedule Time</th>
+            <th>Frequency</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if monitors %}
+            {% for monitor in monitors %}
+            <tr data-alert-name="{{ monitor.AlertName }}">
+                <td><input type="checkbox" class="monitor-checkbox" value="{{ monitor.AlertName }}"></td>
+                <td>{{ monitor.AlertName }}</td>
+                <td>{{ monitor.Connection }}</td>
+                <td>{{ monitor.ServiceType }}</td>
+                <td>{{ monitor.HealthCheck }}</td>
+                <td>{{ monitor.Response }}</td>
+                <td>{{ monitor.Description }}</td>
+                <td class="status-{{ monitor.Status.lower() }}">{{ monitor.Status }}</td>
+                <td>{{ monitor.ScheduleTime }}</td>
+                <td>{{ monitor.Frequency }}</td>
+                <td class="actions">
+                    <button class="btn btn-primary" onclick="editMonitor('{{ monitor.AlertName }}')">Edit</button>
+                    <button class="btn btn-danger" onclick="deleteMonitor('{{ monitor.AlertName }}')">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="11" class="empty-state">
+                    <p>Alerts Not Updated</p>
+                </td>
+            </tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleAll(source) {
+        const checkboxes = document.getElementsByClassName('monitor-checkbox');
+        for (let checkbox of checkboxes) {
+            checkbox.checked = source.checked;
+        }
+    }
+
+    function exportSelected() {
+        const checkboxes = document.getElementsByClassName('monitor-checkbox');
+        const selected = [];
+        for (let checkbox of checkboxes) {
+            if (checkbox.checked) {
+                selected.push(checkbox.value);
+            }
+        }
+        if (selected.length === 0) {
+            alert('Please select at least one monitor to export');
+            return;
+        }
+        window.location.href = `/export?monitors=${selected.join(',')}`;
+    }
+
+    
+    function exportAllCSV() {
+        window.location.href = '/export';
+    }
+
+    function uploadCSV() {
+        const fileInput = document.getElementById('csvFile');
+        if (!fileInput.files || fileInput.files.length === 0) {
+            alert('Please select a file to upload');
+            return;
+        }
+
+        const file = fileInput.files[0];
+        if (!file.name.endsWith('.csv')) {
+            alert('Please select a CSV file');
+            return;
+        }
+
+        // Create FormData object
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Send request to server
+        fetch('/import', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            alert(`Successfully imported ${data.imported} services`);
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while importing services');
+        })
+        .finally(() => {
+            document.getElementById('uploadModal').style.display = 'none';
+            document.getElementById('uploadForm').reset();
+        });
+    }
+
+
+    function editMonitor(alertName) {
+        const row = document.querySelector(`tr[data-alert-name="${alertName}"]`);
+        if (!row) return;
+        
+        const cells = row.cells;
+        
+        // Set form values
+        document.getElementById('isEdit').value = 'true';
+        document.getElementById('editAlertName').value = alertName;
+        document.getElementById('AlertName').value = cells[1].textContent;
+        document.getElementById('Connection').value = cells[2].textContent;
+        document.getElementById('ServiceType').value = cells[3].textContent;
+        document.getElementById('HealthCheck').value = cells[4].textContent;
+        document.getElementById('Response').value = cells[5].textContent;
+        document.getElementById('Description').value = cells[6].textContent;
+        document.getElementById('Status').value = cells[7].textContent;
+        document.getElementById('ScheduleTime').value = cells[8].textContent;
+        document.getElementById('Frequency').value = cells[9].textContent;
+        
+        // Update form action and button text
+        document.getElementById('monitorForm').action = `/monitor/${alertName}`;
+        document.getElementById('submitBtn').textContent = 'Update Alert';
+        document.getElementById('cancelBtn').style.display = 'inline-block';
+        
+        // Scroll to form
+        document.getElementById('monitorForm').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+        resetForm();
+        document.getElementById('isEdit').value = 'false';
+        document.getElementById('editAlertName').value = '';
+        document.getElementById('monitorForm').action = '/monitor';
+        document.getElementById('submitBtn').textContent = 'Add Alert';
+        document.getElementById('cancelBtn').style.display = 'none';
+    }
+
+    function deleteMonitor(alertName) {
+        if (confirm(`Are you sure you want to delete monitor "${alertName}"?`)) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/monitor/${alertName}/delete`;
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    function resetForm() {
+        document.getElementById('monitorForm').reset();
+        document.getElementById('isEdit').value = 'false';
+        document.getElementById('editAlertName').value = '';
+        document.getElementById('monitorForm').action = '/monitor';
+        document.getElementById('submitBtn').textContent = 'Add Monitor';
+        document.getElementById('cancelBtn').style.display = 'none';
+    }
+</script>
+
+
+<style>
+    /* Modal styles */
+    .modal {
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.4);
+    }
+
+    .modal-content {
+        background-color: #fefefe;
+        margin: 10% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        max-width: 500px;
+    }
+
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close:hover {
+        color: black;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+    }
+
+    .form-group input[type="file"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+</style>
+
+{% endblock %}
+

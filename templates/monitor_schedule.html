@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Monitor Schedules{% endblock %}
+
+{% block header %}Monitor Schedules{% endblock %}
+
+{% block content %}
+<div class="button-group">
+    <button class="btn btn-primary" onclick="window.location.reload()">Refresh</button>
+    <button class="btn btn-success" onclick="window.location.href='/monitor-schedule/export'">Export CSV</button>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Alert Name</th>
+            <th>Health Check</th>
+            <th>Schedule Time</th>
+            <th>Frequency (minutes)</th>
+            <th>Host Name</th>
+            <th>Last Check Time</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if schedules %}
+            {% for schedule in schedules %}
+            <tr>
+                <td>{{ schedule.AlertName }}</td>
+                <td>{{ schedule.HealthCheck }}</td>
+                <td>{{ schedule.ScheduleTime }}</td>
+                <td>{{ schedule.Frequency }}</td>
+                <td>{{ schedule.HostName }}</td>
+                <td>{{ schedule.LastCheckTime }}</td>
+                <td class="status-{{ schedule.Status.lower() }}">{{ schedule.Status }}</td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="7" class="empty-state">
+                    <p>No active monitor schedules found</p>
+                </td>
+            </tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh the page every 5 minutes
+    setTimeout(function() {
+        window.location.reload();
+    }, 300000);
+</script>
+{% endblock %} 
